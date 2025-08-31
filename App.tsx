@@ -4,14 +4,14 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useGame } from "./hooks/useGame";
-import MenuScreen from "./screens/MenuScreen";
-import LobbyScreen from "./screens/LobbyScreen";
-import QuestionPreviewScreen from "./screens/QuestionPreviewScreen";
-import QuestionScreen from "./screens/QuestionScreen";
-import VotingScreen from "./screens/VotingScreen";
-import ResultsScreen from "./screens/ResultsScreen";
-import ManualScoringScreen from "./screens/ManualScoringScreen";
-import RankingsScreen from "./screens/RankingsScreen";
+import QuestionScreen from "./app/question";
+import VotingScreen from "./app/voting";
+import ResultsScreen from "./app/results";
+import ManualScoringScreen from "./app/manual-scoring";
+import RankingsScreen from "./app/rankings";
+import MenuScreen from "./app";
+import LobbyScreen from "./app/lobby";
+import QuestionPreviewScreen from "./app/question-preview";
 
 const Stack = createNativeStackNavigator();
 

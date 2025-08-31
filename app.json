@@ -20,7 +20,9 @@
         "CFBundleURLTypes": [
           {
             "CFBundleURLName": "com.mariusrp.triviabluff",
-            "CFBundleURLSchemes": ["com.mariusrp.triviabluff"]
+            "CFBundleURLSchemes": [
+              "com.mariusrp.triviabluff"
+            ]
           }
         ]
       }
@@ -30,7 +32,8 @@
         "foregroundImage": "./assets/fakeit-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.mariusrp.TriviaBluff"
     },
     "web": {
       "fakeit-icon": "./assets/fakeit-icon.png"
@@ -40,6 +43,8 @@
         "projectId": "00168539-db3c-4a0a-ad43-f14bb2abc3c0"
       }
     },
-    "plugins": ["expo-router"]
+    "plugins": [
+      "expo-router"
+    ]
   }
 }

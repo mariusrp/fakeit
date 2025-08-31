@@ -1,13 +1,15 @@
 import { useEffect, useCallback } from "react";
-import { Alert } from "react-native";
+import { Alert, BackHandler } from "react-native";
 import { useGameStore } from "../stores/gameStore";
 import { GameService } from "../services/gameService";
+import StorageService from "../services/storageService";
 import { GameData } from "../types";
 import { MIN_PLAYERS, questions } from "../constants/gameData";
 
 export const useGame = () => {
   const store = useGameStore();
   const gameService = GameService.getInstance();
+  const storageService = StorageService.getInstance();
 
   // Subscribe to game updates
   useEffect(() => {
@@ -23,6 +25,23 @@ export const useGame = () => {
     return unsubscribe;
   }, [store.gameCode, store.setGameData]);
 
+  // Load player data on initialization
+  useEffect(() => {
+    const loadInitialData = async () => {
+      const playerData = await storageService.getPlayerData();
+      if (playerData) {
+        if (playerData.name && !store.playerName) {
+          store.setPlayerName(playerData.name);
+        }
+        if (playerData.emoji && !store.selectedEmoji) {
+          store.setSelectedEmoji(playerData.emoji);
+        }
+      }
+    };
+
+    loadInitialData();
+  }, []);
+
   // Reset player states when new round starts
   useEffect(() => {
     if (store.gameData?.phase === "question") {
@@ -33,6 +52,39 @@ export const useGame = () => {
     store.gameData?.currentQuestion,
     store.resetPlayerStates,
   ]);
+
+  // Back button handling
+  useEffect(() => {
+    const backAction = () => {
+      if (store.gameState !== "menu") {
+        Alert.alert(
+          "Forlat spillet?",
+          "Er du sikker på at du vil gå tilbake til hovedmenyen?",
+          [
+            {
+              text: "Avbryt",
+              style: "cancel",
+            },
+            {
+              text: "Forlat",
+              style: "destructive",
+              onPress: () => {
+                leaveGame();
+              },
+            },
+          ]
+        );
+        return true; // Prevent default back action
+      }
+      return false; // Allow default back action
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      "hardwareBackPress",
+      backAction
+    );
+    return () => backHandler.remove();
+  }, [store.gameState]);
 
   // Auto-advance to voting when all players have answered
   useEffect(() => {
@@ -57,6 +109,24 @@ export const useGame = () => {
     store.gameCode,
   ]);
 
+  const leaveGame = useCallback(async () => {
+    try {
+      // Clean up game state
+      store.setGameCode("");
+      store.setGameData(null);
+      store.setIsHost(false);
+      store.setGameState("menu");
+      store.resetPlayerStates();
+
+      // Clear temporary game data
+      store.setJoinCode("");
+      store.setPreviewIndex(null);
+      store.setPreviewQuestion(null);
+    } catch (error) {
+      console.error("Error leaving game:", error);
+    }
+  }, [store]);
+
   const createGame = useCallback(async () => {
     if (!store.playerName.trim()) {
       Alert.alert("Feil", "Skriv inn navnet ditt først");
@@ -68,6 +138,13 @@ export const useGame = () => {
     }
 
     try {
+      // Save player data to storage
+      await storageService.updatePlayerData({
+        name: store.playerName,
+        emoji: store.selectedEmoji,
+        lastPlayed: new Date().toISOString(),
+      });
+
       const code = gameService.generateGameCode();
       await gameService.createGame(
         code,
@@ -79,11 +156,14 @@ export const useGame = () => {
       store.setGameCode(code);
       store.setIsHost(true);
       store.setGameState("lobby");
+
+      // Add XP for creating a game
+      await storageService.addXP(10);
     } catch (error) {
       Alert.alert("Feil", "Kunne ikke opprette spill");
       console.error("Error creating game:", error);
     }
-  }, [store, gameService]);
+  }, [store, gameService, storageService]);
 
   const joinGame = useCallback(async () => {
     if (!store.playerName.trim() || !store.joinCode.trim()) {
@@ -96,6 +176,13 @@ export const useGame = () => {
     }
 
     try {
+      // Save player data to storage
+      await storageService.updatePlayerData({
+        name: store.playerName,
+        emoji: store.selectedEmoji,
+        lastPlayed: new Date().toISOString(),
+      });
+
       const success = await gameService.joinGame(
         store.joinCode,
         store.playerName,
@@ -106,6 +193,9 @@ export const useGame = () => {
         store.setGameCode(store.joinCode);
         store.setIsHost(false);
         store.setGameState("lobby");
+
+        // Add XP for joining a game
+        await storageService.addXP(5);
       } else {
         Alert.alert("Feil", "Spill ikke funnet! Sjekk spillkoden.");
       }
@@ -113,7 +203,7 @@ export const useGame = () => {
       Alert.alert("Feil", "Kunne ikke joine spillet. Sjekk spillkoden!");
       console.error("Error joining game:", error);
     }
-  }, [store, gameService]);
+  }, [store, gameService, storageService]);
 
   const startRound = useCallback(async () => {
     if (!store.isHost) return;
@@ -191,11 +281,14 @@ export const useGame = () => {
       if (newGuessCount >= (store.gameData?.maxGuesses || 3)) {
         store.setHasAnswered(true);
       }
+
+      // Add XP for submitting answer
+      await storageService.addXP(2);
     } catch (error) {
       Alert.alert("Feil", "Kunne ikke sende inn svaret");
       console.error("Error submitting answer:", error);
     }
-  }, [store, gameService]);
+  }, [store, gameService, storageService]);
 
   const submitVote = useCallback(async () => {
     if (!store.selectedAnswer) {
@@ -210,11 +303,14 @@ export const useGame = () => {
         store.selectedAnswer
       );
       store.setHasVoted(true);
+
+      // Add XP for voting
+      await storageService.addXP(1);
     } catch (error) {
       Alert.alert("Feil", "Kunne ikke sende inn stemme");
       console.error("Error submitting vote:", error);
     }
-  }, [store, gameService]);
+  }, [store, gameService, storageService]);
 
   const proceedToVoting = useCallback(async () => {
     if (!store.isHost) return;
@@ -269,6 +365,34 @@ export const useGame = () => {
     }
   }, [store, gameService]);
 
+  const endGame = useCallback(async () => {
+    if (!store.gameData || !store.playerName) return;
+
+    try {
+      // Calculate if player won (was in top position)
+      const players = Object.values(store.gameData.players || {});
+      const sortedPlayers = players.sort((a: any, b: any) => b.score - a.score);
+      const playerWon = sortedPlayers[0]?.name === store.playerName;
+      const playerScore =
+        sortedPlayers.find((p: any) => p.name === store.playerName)?.score || 0;
+
+      // Record game result in storage
+      await storageService.recordGameResult(playerWon, playerScore);
+
+      // Award bonus XP based on performance
+      if (playerWon) {
+        await storageService.addXP(50); // Bonus for winning
+      } else if (
+        sortedPlayers.length >= 3 &&
+        sortedPlayers.slice(0, 3).some((p: any) => p.name === store.playerName)
+      ) {
+        await storageService.addXP(25); // Bonus for top 3
+      }
+    } catch (error) {
+      console.error("Error recording game result:", error);
+    }
+  }, [store.gameData, store.playerName, storageService]);
+
   const canStartGame = useCallback(() => {
     if (!store.gameData?.players) return false;
     return Object.keys(store.gameData.players).length >= MIN_PLAYERS;
@@ -286,6 +410,7 @@ export const useGame = () => {
     // Actions
     createGame,
     joinGame,
+    leaveGame,
     startRound,
     skipQuestion,
     confirmQuestion,
@@ -296,6 +421,7 @@ export const useGame = () => {
     proceedToManualScoring,
     proceedToRankings,
     nextRound,
+    endGame,
 
     // Computed
     canStartGame,
